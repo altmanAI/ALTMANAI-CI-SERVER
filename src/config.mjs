@@ -11,6 +11,13 @@ function positiveInteger(value, fallback, name) {
   return parsed;
 }
 
+function booleanValue(value, fallback, name) {
+  if (value === undefined || value === '') return fallback;
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  throw new Error(`${name} must be true or false`);
+}
+
 function required(value, name) {
   if (!value || !String(value).trim()) {
     throw new Error(`${name} is required`);
@@ -37,6 +44,17 @@ export async function loadConfig(env = process.env) {
     port: positiveInteger(env.PORT, 8080, 'PORT'),
     logLevel,
     maxBodyBytes: positiveInteger(env.MAX_BODY_BYTES, 1_048_576, 'MAX_BODY_BYTES'),
+    webhookRateLimitWindowMs: positiveInteger(
+      env.WEBHOOK_RATE_LIMIT_WINDOW_MS,
+      60_000,
+      'WEBHOOK_RATE_LIMIT_WINDOW_MS'
+    ),
+    webhookRateLimitMax: positiveInteger(
+      env.WEBHOOK_RATE_LIMIT_MAX,
+      120,
+      'WEBHOOK_RATE_LIMIT_MAX'
+    ),
+    trustProxyHeaders: booleanValue(env.TRUST_PROXY_HEADERS, false, 'TRUST_PROXY_HEADERS'),
     webhookSecret: env.WEBHOOK_SECRET || '',
     founderGitHubLogin: env.FOUNDER_GITHUB_LOGIN || '',
     founderApprovalPhrase: env.FOUNDER_APPROVAL_PHRASE || 'All Clear for Impact',
@@ -49,6 +67,12 @@ export async function loadConfig(env = process.env) {
     policyPath,
     policy,
     evidenceLedgerPath: resolve(env.EVIDENCE_LEDGER_PATH || './data/evidence.ndjson'),
+    evidenceBackupDir: resolve(env.EVIDENCE_BACKUP_DIR || './data/backups'),
+    ledgerBackupRetentionDays: positiveInteger(
+      env.LEDGER_BACKUP_RETENTION_DAYS,
+      30,
+      'LEDGER_BACKUP_RETENTION_DAYS'
+    ),
     serviceName: env.SERVICE_NAME || 'altmanai-ci-server',
     serviceVersion: env.SERVICE_VERSION || '0.1.0'
   };
