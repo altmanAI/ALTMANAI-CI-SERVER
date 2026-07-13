@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { once } from 'node:events';
 import { createApp } from '../src/app.mjs';
 import { createLogger } from '../src/logger.mjs';
@@ -15,6 +16,7 @@ function testConfig(overrides = {}) {
     webhookRateLimitMax: 120,
     trustProxyHeaders: false,
     webhookSecret: 'secret',
+    webhookSecretPrevious: '',
     ...overrides
   };
 }
@@ -32,6 +34,10 @@ async function startServer(t, config = testConfig()) {
   return server.address().port;
 }
 
+function signature(secret, body) {
+  return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+}
+
 test('health route reports service status', async (t) => {
   const port = await startServer(t);
   const response = await fetch(`http://127.0.0.1:${port}/healthz`);
@@ -47,6 +53,23 @@ test('webhook route rejects invalid signatures', async (t) => {
     body: '{}'
   });
   assert.equal(response.status, 401);
+});
+
+test('webhook route accepts the previous secret during controlled rotation', async (t) => {
+  const body = JSON.stringify({ zen: 'keep it logically awesome' });
+  const port = await startServer(t, testConfig({ webhookSecretPrevious: 'old-secret' }));
+  const response = await fetch(`http://127.0.0.1:${port}/webhooks/github`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-github-event': 'ping',
+      'x-github-delivery': 'rotation-test',
+      'x-hub-signature-256': signature('old-secret', body)
+    },
+    body
+  });
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).accepted, true);
 });
 
 test('webhook route rate limits repeated requests by client address', async (t) => {
