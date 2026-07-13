@@ -1,0 +1,77 @@
+name: Deploy Fly Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Human-approved deployment reason
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: altmanai-ci-server-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Validate and deploy
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Verify deployment controls
+        env:
+          FLYCTL_VERSION: ${{ vars.FLYCTL_VERSION }}
+          DEPLOYMENT_REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOYMENT_REASON}"
+          test -n "${FLYCTL_VERSION}"
+          echo "Deployment is human-triggered from main with a pinned flyctl version."
+
+      - name: Check out exact revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Validate source and tests
+        run: |
+          npm run check
+          npm test
+          npm run smoke
+          npm run verify-ledger
+          npm pack --dry-run
+
+      - name: Build production container
+        run: docker build --tag altmanai-ci-server:${GITHUB_SHA} .
+
+      - name: Set up pinned flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@v1.5
+        with:
+          version: ${{ vars.FLYCTL_VERSION }}
+
+      - name: Deploy with rolling replacement
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --remote-only --config fly.toml --strategy rolling --wait-timeout 10m
+
+      - name: Verify production health
+        run: |
+          curl --fail --show-error --silent --retry 5 --retry-delay 5 \
+            https://altmanai-ci-server.fly.dev/healthz
+          curl --fail --show-error --silent --retry 5 --retry-delay 5 \
+            https://altmanai-ci-server.fly.dev/readyz
