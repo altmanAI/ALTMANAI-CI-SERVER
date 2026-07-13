@@ -8,26 +8,26 @@
 
 ## Status
 
-**Version:** `0.1.0`  
-**Maturity:** functional foundation; not yet production-certified  
+**Version:** `0.2.0`
+**Maturity:** functional foundation; not yet production-certified
 **Runtime:** Node.js 22+, zero runtime package dependencies
 
 ## Core controls
 
 - HMAC-SHA256 validation of the untouched GitHub webhook body
-- Exact Founder approval gate for material changes
+- Founder approval bound to the exact `altmanAI` login and immutable GitHub user ID `233472124`
 - Required PR evidence, rollback, and AI-assistance disclosure sections
 - Credential and private-key path blocking
 - GitHub Checks API reporting
 - Hash-chained NDJSON evidence records
-- Duplicate delivery detection
+- Concurrent and ledger-backed duplicate delivery detection
 - Repository-owner allowlisting
-- Health, readiness, and non-sensitive status endpoints
+- Health, readiness, status, and repository-backed verification endpoints
 - Container-first deployment and first-party test coverage
 
 ## Approval semantics
 
-A material change is approved only when all configured policy requirements pass and the configured Founder GitHub identity posts this exact standalone pull-request comment:
+A material change is approved only when all configured policy requirements pass and Blake Hunter Altman’s configured GitHub identity—login `altmanAI`, user ID `233472124`—posts this exact standalone pull-request comment:
 
 ```text
 All Clear for Impact
@@ -80,6 +80,7 @@ Then verify:
 curl http://localhost:8080/healthz
 curl http://localhost:8080/readyz
 curl http://localhost:8080/v1/status
+curl http://localhost:8080/v1/verification
 ```
 
 ## GitHub App configuration
@@ -109,9 +110,9 @@ Store the webhook secret and GitHub App private key in the deployment platform's
 
 ## Configuration
 
-The enforcement policy is versioned in [`config/policy.json`](config/policy.json). Runtime settings are environment variables documented in [`.env.example`](.env.example).
+The enforcement policy is versioned in [`config/policy.json`](config/policy.json). The Blake Hunter Altman × AltmanAI Model 2.0 authorization record is stored in [`config/verification.json`](config/verification.json), with a human-readable copy in [`VERIFICATION.md`](VERIFICATION.md). Runtime settings are documented in [`.env.example`](.env.example).
 
-The production authentication path uses a GitHub App ID and private key to mint short-lived installation tokens. `GITHUB_TOKEN` exists only as a local-development fallback.
+The production authentication path uses a GitHub App ID and private key to mint and cache short-lived installation tokens. Static `GITHUB_TOKEN` use is rejected in production unless `ALLOW_STATIC_GITHUB_TOKEN=true` is explicitly configured.
 
 ## Test and verification commands
 
@@ -127,8 +128,8 @@ npm run verify-ledger
 Build and run locally:
 
 ```bash
-docker build -t altmanai-ci-server:0.1.0 .
-docker run --rm -p 8080:8080 --env-file .env altmanai-ci-server:0.1.0
+docker build -t altmanai-ci-server:0.2.0 .
+docker run --rm -p 8080:8080 --env-file .env altmanai-ci-server:0.2.0
 ```
 
 Production requirements and hardening steps are documented in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
@@ -141,4 +142,4 @@ The ledger demonstrates whether stored records were altered after creation. It d
 
 Final corporate, legal, financial, publishing, deployment, and approval authority remains human. AI assistance may analyze, draft, test, and recommend, but it cannot issue Founder authorization.
 
-See [`GOVERNANCE.md`](GOVERNANCE.md), [`PROOF.md`](PROOF.md), and [`SECURITY.md`](SECURITY.md).
+See [`VERIFICATION.md`](VERIFICATION.md), [`GOVERNANCE.md`](GOVERNANCE.md), [`PROOF.md`](PROOF.md), and [`SECURITY.md`](SECURITY.md).

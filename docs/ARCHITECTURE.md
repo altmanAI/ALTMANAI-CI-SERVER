@@ -8,7 +8,7 @@ A Node.js `http` server exposes health, readiness, status, and GitHub webhook ro
 
 ### GitHub authentication
 
-Production uses a GitHub App private key to create an app JWT and exchange it for a short-lived installation token tied to the webhook's `installation.id`.
+Production uses a GitHub App private key to create an app JWT and exchange it for a short-lived installation token tied to the webhook's `installation.id`. Installation tokens are cached only until one minute before expiration.
 
 ### Policy engine
 
@@ -18,7 +18,7 @@ The deterministic policy engine evaluates:
 - protected and forbidden paths
 - required PR sections
 - AI-assistance disclosure
-- exact Founder authorization
+- exact Founder authorization bound to login and immutable GitHub user ID
 
 ### Check publisher
 
@@ -34,7 +34,8 @@ Every accepted, ignored, successful, or failed decision is serialized to NDJSON 
 2. Webhook ingress to verified GitHub event
 3. Service to GitHub REST API
 4. Service to evidence storage
-5. Human GitHub identity to Founder approval decision
+5. Blake Hunter Altman GitHub login and immutable user ID to Founder approval decision
+6. Repository-backed verification statement to runtime identity metadata
 
 ## Scale path
 
@@ -44,5 +45,4 @@ For multi-instance production deployment:
 - use shared durable storage for delivery idempotency and evidence
 - add distributed tracing
 - use object-lock storage for evidence retention
-- introduce installation-token caching with expiry
 - add replay and dead-letter workflows

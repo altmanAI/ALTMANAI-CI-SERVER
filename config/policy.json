@@ -1,6 +1,6 @@
 {
   "$schema": "https://altmanai.tech/schemas/ci-policy-v1.json",
-  "policyVersion": "2026.07.13-v1",
+  "policyVersion": "2026.07.13-v2",
   "checkName": "AltmanAI Governance Gate",
   "approvalMode": "material_changes",
   "materialChangeFileThreshold": 10,
@@ -27,6 +27,8 @@
     "SECURITY.md",
     "GOVERNANCE.md",
     "PROOF.md",
+    "VERIFICATION.md",
+    "config/verification.json",
     "LICENSE.md"
   ],
   "forbiddenPathGlobs": [

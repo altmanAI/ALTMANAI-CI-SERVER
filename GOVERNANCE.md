@@ -6,7 +6,7 @@
 
 ## Founder approval
 
-Material changes require an attributable pull-request comment from the configured Founder GitHub identity. The exact phrase is configured through `FOUNDER_APPROVAL_PHRASE` and defaults to:
+Material changes require an attributable pull-request comment from the configured Blake Hunter Altman GitHub identity (`altmanAI`, user ID `233472124`). The exact phrase is configured through `FOUNDER_APPROVAL_PHRASE` and defaults to:
 
 > All Clear for Impact
 
@@ -32,3 +32,7 @@ Every processed webhook creates an append-only record containing the repository,
 ## AI-assisted work
 
 AI systems may assist with research, implementation, testing, and documentation. Every material pull request must identify AI assistance and the accountable human reviewer. AI assistance is not approval.
+
+## Verification record
+
+The active build authorization is recorded in [`VERIFICATION.md`](VERIFICATION.md) and [`config/verification.json`](config/verification.json). The runtime verifies the statement digest before startup.

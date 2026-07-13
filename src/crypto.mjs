@@ -5,7 +5,7 @@ export function sha256(value) {
 }
 
 export function verifyGitHubSignature({ secret, signatureHeader, rawBody }) {
-  if (!secret || !signatureHeader || !signatureHeader.startsWith('sha256=')) {
+  if (!secret || typeof signatureHeader !== 'string' || !/^sha256=[a-f0-9]{64}$/.test(signatureHeader)) {
     return false;
   }
 

@@ -8,6 +8,7 @@ function json(res, status, body) {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(payload),
     'Cache-Control': 'no-store',
+    'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'no-referrer'
@@ -30,9 +31,18 @@ async function readBody(req, maxBytes) {
   return Buffer.concat(chunks);
 }
 
+function headerString(value) {
+  return Array.isArray(value) ? value[0] : typeof value === 'string' ? value : '';
+}
+
+function requestIdentifier(value) {
+  const candidate = headerString(value).trim();
+  return candidate && candidate.length <= 128 ? candidate : randomUUID();
+}
+
 export function createApp({ config, processor, ledger, logger, startedAt = Date.now() }) {
   return createHttpServer(async (req, res) => {
-    const requestId = String(req.headers['x-request-id'] || randomUUID());
+    const requestId = requestIdentifier(req.headers['x-request-id']);
     const started = Date.now();
     try {
       if (req.method === 'GET' && req.url === '/healthz') {
@@ -54,13 +64,26 @@ export function createApp({ config, processor, ledger, logger, startedAt = Date.
           environment: config.nodeEnv,
           uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
           policyVersion: config.policy.policyVersion,
-          policyDigest: sha256(JSON.stringify(config.policy))
+          policyDigest: sha256(JSON.stringify(config.policy)),
+          authorizationRecordId: config.authorizationRecordId,
+          authorizingHuman: config.founderName,
+          aiExecutionPartner: config.aiPartnerName
         });
       }
 
+      if (req.method === 'GET' && req.url === '/v1/verification') {
+        return json(res, 200, config.verification);
+      }
+
       if (req.method === 'POST' && req.url === '/webhooks/github') {
+        const event = headerString(req.headers['x-github-event']).trim();
+        const deliveryId = headerString(req.headers['x-github-delivery']).trim();
+        if (!event || !deliveryId) {
+          return json(res, 400, { error: 'missing_github_delivery_headers', requestId });
+        }
+
         const rawBody = await readBody(req, config.maxBodyBytes);
-        const signatureHeader = req.headers['x-hub-signature-256'];
+        const signatureHeader = headerString(req.headers['x-hub-signature-256']);
         if (!verifyGitHubSignature({
           secret: config.webhookSecret,
           signatureHeader,
@@ -76,11 +99,7 @@ export function createApp({ config, processor, ledger, logger, startedAt = Date.
           return json(res, 400, { error: 'invalid_json', requestId });
         }
 
-        const result = await processor.process({
-          event: req.headers['x-github-event'] || 'unknown',
-          deliveryId: req.headers['x-github-delivery'] || null,
-          payload
-        });
+        const result = await processor.process({ event, deliveryId, payload });
         return json(res, 202, { requestId, ...result });
       }
 

@@ -4,7 +4,7 @@
 
 | Version | Supported |
 |---|---|
-| 0.1.x | Yes |
+| 0.2.x | Yes |
 
 ## Reporting a vulnerability
 
@@ -23,7 +23,7 @@ Include:
 - Verify the webhook signature against the raw request body before JSON parsing.
 - Reject missing, malformed, or mismatched signatures.
 - Never log secrets, tokens, private keys, or complete webhook payloads.
-- Accept Founder authorization only from the configured login and only as an exact standalone phrase.
+- Accept Founder authorization only when the configured login and immutable GitHub user ID both match, and only as an exact standalone phrase.
 - Keep GitHub App permissions at the minimum required scope.
 - Run as a non-root container user.
 - Keep evidence storage access-restricted and retention-controlled.

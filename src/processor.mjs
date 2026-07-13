@@ -2,12 +2,22 @@ import { evaluatePullRequest } from './policy-engine.mjs';
 import { sha256 } from './crypto.mjs';
 
 const PR_ACTIONS = new Set(['opened', 'reopened', 'synchronize', 'edited', 'ready_for_review']);
+const COMMENT_ACTIONS = new Set(['created', 'edited', 'deleted']);
 
 function repositoryCoordinates(payload) {
   const fullName = payload.repository?.full_name;
   if (!fullName || !fullName.includes('/')) throw new Error('Webhook payload is missing repository.full_name');
-  const [owner, repo] = fullName.split('/');
+  const [owner, repo, ...remainder] = fullName.split('/');
+  if (!owner || !repo || remainder.length) throw new Error('Webhook repository.full_name is invalid');
   return { owner, repo, fullName };
+}
+
+function pullRequestCoordinates(pullRequest, fallbackNumber) {
+  const number = Number(pullRequest?.number || fallbackNumber);
+  const headSha = pullRequest?.head?.sha;
+  if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Pull request number is invalid');
+  if (!headSha || typeof headSha !== 'string') throw new Error('Pull request head SHA is missing');
+  return { number, headSha };
 }
 
 export class WebhookProcessor {
@@ -26,7 +36,13 @@ export class WebhookProcessor {
 
     try {
       if (event === 'ping') {
-        await this.ledger.append({ delivery_id: deliveryId, event, decision: 'accepted', zen: payload.zen || null });
+        await this.ledger.append({
+          delivery_id: deliveryId,
+          event,
+          decision: 'accepted',
+          zen: payload.zen || null,
+          authorization_record_id: this.config.authorizationRecordId
+        });
         return { accepted: true, event, message: 'pong' };
       }
 
@@ -34,7 +50,7 @@ export class WebhookProcessor {
         return await this.evaluateAndReport({ event, deliveryId, payload, pullRequest: payload.pull_request });
       }
 
-      if (event === 'issue_comment' && payload.issue?.pull_request) {
+      if (event === 'issue_comment' && COMMENT_ACTIONS.has(payload.action) && payload.issue?.pull_request) {
         const { owner, repo } = repositoryCoordinates(payload);
         const token = await this.github.getToken(payload.installation?.id);
         const pullRequest = await this.github.getPullRequest(owner, repo, payload.issue.number, token);
@@ -46,7 +62,8 @@ export class WebhookProcessor {
         event,
         action: payload.action || null,
         repository: payload.repository?.full_name || null,
-        decision: 'ignored'
+        decision: 'ignored',
+        authorization_record_id: this.config.authorizationRecordId
       });
       return { accepted: true, ignored: true, event, action: payload.action || null };
     } finally {
@@ -67,7 +84,7 @@ export class WebhookProcessor {
 
   async evaluateAndReport({ event, deliveryId, payload, pullRequest, token: suppliedToken }) {
     const { owner, repo, fullName } = repositoryCoordinates(payload);
-    const number = pullRequest.number || payload.issue?.number;
+    const { number, headSha } = pullRequestCoordinates(pullRequest, payload.issue?.number);
     const token = suppliedToken || await this.github.getToken(payload.installation?.id);
     const [files, comments] = await Promise.all([
       this.github.getPullRequestFiles(owner, repo, number, token),
@@ -80,15 +97,16 @@ export class WebhookProcessor {
       files,
       comments,
       founderLogin: this.config.founderGitHubLogin,
+      founderUserId: this.config.founderGitHubUserId,
       approvalPhrase: this.config.founderApprovalPhrase
     });
 
     const checkRun = await this.github.createCheckRun(owner, repo, token, {
       name: this.config.policy.checkName,
-      head_sha: pullRequest.head.sha,
+      head_sha: headSha,
       status: 'completed',
       conclusion: result.conclusion,
-      external_id: `${fullName}#${number}:${deliveryId || 'manual'}`,
+      external_id: `${fullName}#${number}:${deliveryId}`,
       completed_at: new Date().toISOString(),
       output: {
         title: result.title,
@@ -103,12 +121,17 @@ export class WebhookProcessor {
       action: payload.action || null,
       repository: fullName,
       pull_request_number: number,
-      head_sha: pullRequest.head.sha,
+      head_sha: headSha,
       policy_version: this.config.policy.policyVersion,
       policy_digest: sha256(JSON.stringify(this.config.policy)),
       decision: result.conclusion,
       finding_codes: result.findings.map((item) => item.code),
       founder_approval_recorded: result.metadata.founderApproved,
+      authorizing_human: this.config.founderName,
+      authorizing_github_login: this.config.founderGitHubLogin,
+      authorizing_github_user_id: this.config.founderGitHubUserId,
+      ai_execution_partner: this.config.aiPartnerName,
+      authorization_record_id: this.config.authorizationRecordId,
       check_run_id: checkRun.id,
       check_run_url: checkRun.html_url || null
     });
@@ -118,7 +141,8 @@ export class WebhookProcessor {
       pullRequest: number,
       conclusion: result.conclusion,
       findings: result.findings.length,
-      evidenceRecord: evidence.record_id
+      evidenceRecord: evidence.record_id,
+      authorizationRecord: this.config.authorizationRecordId
     });
 
     return {
@@ -129,7 +153,8 @@ export class WebhookProcessor {
       conclusion: result.conclusion,
       findings: result.findings.length,
       checkRunUrl: checkRun.html_url || null,
-      evidenceHash: evidence.record_hash
+      evidenceHash: evidence.record_hash,
+      authorizationRecordId: this.config.authorizationRecordId
     };
   }
 }
