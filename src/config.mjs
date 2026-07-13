@@ -120,7 +120,19 @@ export async function loadConfig(env = process.env) {
     port: positiveInteger(env.PORT, 8080, 'PORT'),
     logLevel,
     maxBodyBytes: positiveInteger(env.MAX_BODY_BYTES, 1_048_576, 'MAX_BODY_BYTES'),
+    webhookRateLimitWindowMs: positiveInteger(
+      env.WEBHOOK_RATE_LIMIT_WINDOW_MS,
+      60_000,
+      'WEBHOOK_RATE_LIMIT_WINDOW_MS'
+    ),
+    webhookRateLimitMax: positiveInteger(
+      env.WEBHOOK_RATE_LIMIT_MAX,
+      120,
+      'WEBHOOK_RATE_LIMIT_MAX'
+    ),
+    trustProxyHeaders: booleanValue(env.TRUST_PROXY_HEADERS, false, 'TRUST_PROXY_HEADERS'),
     webhookSecret: env.WEBHOOK_SECRET || '',
+    webhookSecretPrevious: env.WEBHOOK_SECRET_PREVIOUS || '',
     founderName: env.FOUNDER_NAME || verification.authorizing_human.name,
     founderGitHubLogin: env.FOUNDER_GITHUB_LOGIN || verification.authorizing_human.github_login,
     founderGitHubUserId: optionalPositiveInteger(
@@ -143,6 +155,12 @@ export async function loadConfig(env = process.env) {
     verificationPath,
     verification: deepFreeze(verification),
     evidenceLedgerPath: resolve(env.EVIDENCE_LEDGER_PATH || './data/evidence.ndjson'),
+    evidenceBackupDir: resolve(env.EVIDENCE_BACKUP_DIR || './data/backups'),
+    ledgerBackupRetentionDays: positiveInteger(
+      env.LEDGER_BACKUP_RETENTION_DAYS,
+      30,
+      'LEDGER_BACKUP_RETENTION_DAYS'
+    ),
     serviceName: env.SERVICE_NAME || 'altmanai-ci-server',
     serviceVersion: env.SERVICE_VERSION || '0.2.0'
   };
