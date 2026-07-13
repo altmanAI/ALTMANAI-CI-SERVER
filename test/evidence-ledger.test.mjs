@@ -50,3 +50,22 @@ test('claims in-flight delivery IDs to prevent concurrent replay', async () => {
   ledger.endDelivery('delivery-1');
   assert.equal(ledger.tryBeginDelivery('delivery-1'), true);
 });
+
+
+test('verification waits for queued writes before reading the ledger', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'altmanai-ledger-'));
+  const ledger = new EvidenceLedger(join(dir, 'evidence.ndjson'));
+  const writes = Array.from({ length: 20 }, (_, index) => ledger.append({ delivery_id: `queued-${index}`, index }));
+  const verification = await ledger.verify();
+  await Promise.all(writes);
+  assert.equal(verification.valid, true);
+  assert.equal(verification.records, 20);
+});
+
+test('missing delivery IDs cannot be claimed', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'altmanai-ledger-'));
+  const ledger = new EvidenceLedger(join(dir, 'evidence.ndjson'));
+  await ledger.initialize();
+  assert.equal(ledger.tryBeginDelivery(null), false);
+  assert.equal(ledger.tryBeginDelivery(''), false);
+});

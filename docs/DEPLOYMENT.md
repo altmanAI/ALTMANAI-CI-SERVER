@@ -14,7 +14,9 @@
 - `WEBHOOK_SECRET`
 - `GITHUB_APP_ID`
 - `GITHUB_PRIVATE_KEY`
+- `FOUNDER_NAME`
 - `FOUNDER_GITHUB_LOGIN`
+- `FOUNDER_GITHUB_USER_ID`
 - `ALLOWED_GITHUB_OWNER`
 
 ## Recommended rollout
@@ -26,7 +28,8 @@
 5. Confirm that branch protection requires `AltmanAI Governance Gate`.
 6. Verify the ledger after every scenario.
 7. Perform a credential-leak and webhook-replay review.
-8. Promote only after Founder authorization.
+8. Verify `GET /v1/verification` matches `ALTMANAI-CI-VERIFY-2026-07-13-001`.
+9. Promote only after Founder authorization.
 
 ## Cloud Run example
 
@@ -46,3 +49,7 @@ Alert on:
 ## Backup and retention
 
 The local ledger path is suitable for development only. Production should replicate evidence to retention-controlled storage and regularly verify the hash chain from an independent job.
+
+## Production authentication rule
+
+Use `GITHUB_APP_ID` and `GITHUB_PRIVATE_KEY` in production. Static `GITHUB_TOKEN` authentication is rejected unless `ALLOW_STATIC_GITHUB_TOKEN=true` is deliberately set and documented as a temporary exception.

@@ -33,27 +33,54 @@ function finding(code, severity, message, path = null) {
   return { code, severity, message, path };
 }
 
-function hasStandaloneFounderApproval(comments, founderLogin, phrase) {
-  const founder = founderLogin.toLowerCase();
+function normalizeHeading(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function hasMarkdownHeading(body, requiredHeading) {
+  const expected = normalizeHeading(requiredHeading);
+  return String(body || '').split(/\r?\n/).some((line) => normalizeHeading(line) === expected);
+}
+
+function hasStandaloneFounderApproval(comments, founderLogin, founderUserId, phrase) {
+  const founder = String(founderLogin || '').toLowerCase();
+  const expectedUserId = founderUserId === null || founderUserId === undefined ? null : String(founderUserId);
   return comments.some((comment) => {
-    const login = comment?.user?.login?.toLowerCase();
-    return login === founder && String(comment?.body || '').trim() === phrase;
+    const login = String(comment?.user?.login || '').toLowerCase();
+    const userId = comment?.user?.id === null || comment?.user?.id === undefined ? null : String(comment.user.id);
+    const identityMatches = login === founder && (expectedUserId === null || userId === expectedUserId);
+    return identityMatches && String(comment?.body || '').trim() === phrase;
   });
 }
 
-export function evaluatePullRequest({ policy, pullRequest, files, comments, founderLogin, approvalPhrase }) {
+export function evaluatePullRequest({
+  policy,
+  pullRequest,
+  files = [],
+  comments = [],
+  founderLogin,
+  founderUserId = null,
+  approvalPhrase
+}) {
   const findings = [];
-  const body = String(pullRequest.body || '');
-  const filePaths = files.map((file) => file.filename);
+  const body = String(pullRequest?.body || '');
+  const safeFiles = Array.isArray(files) ? files : [];
+  const safeComments = Array.isArray(comments) ? comments : [];
+  const filePaths = safeFiles.map((file) => file?.filename).filter((path) => typeof path === 'string' && path.length > 0);
   const protectedPaths = filePaths.filter((path) => matchesAny(path, policy.protectedPathGlobs));
   const forbiddenPaths = filePaths.filter((path) => matchesAny(path, policy.forbiddenPathGlobs));
-  const material = protectedPaths.length > 0 || files.length >= policy.materialChangeFileThreshold;
+  const material = protectedPaths.length > 0 || safeFiles.length >= policy.materialChangeFileThreshold;
   const approvalRequired = policy.approvalMode === 'all_changes' ||
     (policy.approvalMode === 'material_changes' && material);
-  const founderApproved = hasStandaloneFounderApproval(comments, founderLogin, approvalPhrase);
+  const founderApproved = hasStandaloneFounderApproval(
+    safeComments,
+    founderLogin,
+    founderUserId,
+    approvalPhrase
+  );
 
-  if (files.length > policy.maxChangedFiles) {
-    findings.push(finding('changed_files_limit', 'failure', `PR changes ${files.length} files; limit is ${policy.maxChangedFiles}.`));
+  if (safeFiles.length > policy.maxChangedFiles) {
+    findings.push(finding('changed_files_limit', 'failure', `PR changes ${safeFiles.length} files; limit is ${policy.maxChangedFiles}.`));
   }
 
   for (const path of forbiddenPaths) {
@@ -61,20 +88,22 @@ export function evaluatePullRequest({ policy, pullRequest, files, comments, foun
   }
 
   for (const heading of policy.requiredPrSections) {
-    if (!body.includes(heading)) {
+    if (!hasMarkdownHeading(body, heading)) {
       findings.push(finding('missing_pr_section', 'failure', `Required PR section is missing: ${heading}`));
     }
   }
 
-  if (policy.requireAiDisclosure && !policy.aiDisclosureMarkers.some((marker) => body.includes(marker))) {
+  const normalizedBody = body.toLowerCase();
+  if (policy.requireAiDisclosure && !policy.aiDisclosureMarkers.some((marker) => normalizedBody.includes(marker.toLowerCase()))) {
     findings.push(finding('missing_ai_disclosure', 'failure', 'PR body must disclose AI assistance using an approved marker.'));
   }
 
   if (approvalRequired && !founderApproved) {
+    const identity = founderUserId ? `@${founderLogin} (GitHub user ID ${founderUserId})` : `@${founderLogin}`;
     findings.push(finding(
       'founder_approval_missing',
       'failure',
-      `Material changes require an exact standalone comment from @${founderLogin}: ${approvalPhrase}`
+      `Material changes require an exact standalone comment from ${identity}: ${approvalPhrase}`
     ));
   }
 
@@ -84,7 +113,7 @@ export function evaluatePullRequest({ policy, pullRequest, files, comments, foun
   const summaryLines = [
     `Decision: **${conclusion.toUpperCase()}**`,
     `Policy: \`${policy.policyVersion}\``,
-    `Changed files: **${files.length}**`,
+    `Changed files: **${safeFiles.length}**`,
     `Material change: **${material ? 'yes' : 'no'}**`,
     `Founder approval required: **${approvalRequired ? 'yes' : 'no'}**`,
     `Founder approval recorded: **${founderApproved ? 'yes' : 'no'}**`
@@ -116,7 +145,7 @@ export function evaluatePullRequest({ policy, pullRequest, files, comments, foun
     findings,
     annotations,
     metadata: {
-      fileCount: files.length,
+      fileCount: safeFiles.length,
       material,
       protectedPaths,
       approvalRequired,

@@ -1,6 +1,5 @@
-# Temporary containment: GitHub-hosted jobs are currently failing before the
-# first step across multiple altmanAI repositories. Keep this workflow manual
-# until the repository/account Actions restriction is cleared in GitHub.
+# Temporary containment: GitHub-hosted jobs are failing before the first step
+# across multiple altmanAI repositories. Keep manual until account runners recover.
 name: CI (manual while hosted runners are restricted)
 
 on:
@@ -15,34 +14,37 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate Node service
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
-
+    name: Node 22 validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container: node:22.16.0-bookworm-slim
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - name: Install Git and certificates
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends git ca-certificates
+          rm -rf /var/lib/apt/lists/*
 
-      - name: Set up Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: package-lock.json
+      - name: Fetch exact workflow revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_REF}"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
 
-      - name: Report toolchain
+      - name: Verify runtime and lockfile
         run: |
           node --version
           npm --version
-          docker --version
+          npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Install locked dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-
-      - name: Validate JavaScript syntax
+      - name: Validate syntax and configuration
         run: npm run check
 
-      - name: Run unit and integration tests
+      - name: Run automated tests
         run: npm test
 
       - name: Run service smoke test
@@ -51,5 +53,23 @@ jobs:
       - name: Verify evidence ledger
         run: npm run verify-ledger
 
-      - name: Build container image
-        run: docker build --tag altmanai-ci-server:${{ github.sha }} .
+      - name: Verify package contents
+        run: npm pack --dry-run
+
+  container-build:
+    name: Container build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch exact workflow revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_REF}"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Build production image
+        run: docker build --tag altmanai-ci-server:${GITHUB_SHA} .

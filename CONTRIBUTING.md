@@ -14,7 +14,7 @@
 - Prefer Node.js standard-library capabilities unless a dependency has a documented security and operational justification.
 - Preserve webhook raw bytes until signature verification is complete.
 - Keep policy evaluation deterministic.
-- Do not weaken Founder authorization semantics.
+- Do not weaken Blake Hunter Altman authorization semantics.
 - Add evidence for every claimed capability.
 
 ## Commit style

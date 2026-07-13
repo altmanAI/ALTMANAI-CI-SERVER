@@ -25,28 +25,68 @@ export class EvidenceLedger {
     this.inFlightDeliveryIds = new Set();
     this.writeQueue = Promise.resolve();
     this.initialized = false;
+    this.initializePromise = null;
   }
 
   async initialize() {
-    await mkdir(dirname(this.path), { recursive: true });
-    let content = '';
-    try {
-      content = await readFile(this.path, 'utf8');
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-    }
+    if (this.initialized) return;
+    if (this.initializePromise) return this.initializePromise;
 
-    const lines = content.split('\n').filter(Boolean);
-    for (const line of lines) {
-      const record = JSON.parse(line);
-      this.previousHash = record.record_hash;
-      if (record.delivery_id) this.deliveryIds.add(record.delivery_id);
+    this.initializePromise = this.initializeFromDisk();
+    try {
+      await this.initializePromise;
+      this.initialized = true;
+    } finally {
+      this.initializePromise = null;
     }
-    const verification = await this.verify();
+  }
+
+  async initializeFromDisk() {
+    await mkdir(dirname(this.path), { recursive: true });
+    const content = await this.readContent();
+    const verification = this.verifyContent(content);
     if (!verification.valid) {
       throw new Error(`Evidence ledger verification failed: ${verification.reason}`);
     }
-    this.initialized = true;
+
+    this.previousHash = verification.lastHash;
+    this.deliveryIds.clear();
+    for (const line of content.split('\n').filter(Boolean)) {
+      const record = JSON.parse(line);
+      if (record.delivery_id) this.deliveryIds.add(record.delivery_id);
+    }
+  }
+
+  async readContent() {
+    try {
+      return await readFile(this.path, 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') return '';
+      throw error;
+    }
+  }
+
+  verifyContent(content) {
+    let previousHash = null;
+    let index = 0;
+    for (const line of content.split('\n').filter(Boolean)) {
+      index += 1;
+      let record;
+      try {
+        record = JSON.parse(line);
+      } catch {
+        return { valid: false, records: index, reason: 'invalid JSON record' };
+      }
+      if (record.previous_hash !== previousHash) {
+        return { valid: false, records: index, reason: 'previous_hash mismatch', recordId: record.record_id };
+      }
+      const expected = digestRecord(record);
+      if (record.record_hash !== expected) {
+        return { valid: false, records: index, reason: 'record_hash mismatch', recordId: record.record_id };
+      }
+      previousHash = record.record_hash;
+    }
+    return { valid: true, records: index, lastHash: previousHash };
   }
 
   hasDelivery(deliveryId) {
@@ -54,7 +94,7 @@ export class EvidenceLedger {
   }
 
   tryBeginDelivery(deliveryId) {
-    if (!deliveryId) return true;
+    if (!deliveryId) return false;
     if (this.hasDelivery(deliveryId)) return false;
     this.inFlightDeliveryIds.add(deliveryId);
     return true;
@@ -68,7 +108,7 @@ export class EvidenceLedger {
     const operation = this.writeQueue.then(async () => {
       if (!this.initialized) await this.initialize();
       const record = {
-        schema_version: '1.0',
+        schema_version: '1.1',
         record_id: randomUUID(),
         created_at: new Date().toISOString(),
         previous_hash: this.previousHash,
@@ -85,28 +125,8 @@ export class EvidenceLedger {
   }
 
   async verify() {
-    let content = '';
-    try {
-      content = await readFile(this.path, 'utf8');
-    } catch (error) {
-      if (error.code === 'ENOENT') return { valid: true, records: 0, lastHash: null };
-      throw error;
-    }
-
-    let previousHash = null;
-    let index = 0;
-    for (const line of content.split('\n').filter(Boolean)) {
-      index += 1;
-      const record = JSON.parse(line);
-      if (record.previous_hash !== previousHash) {
-        return { valid: false, records: index, reason: 'previous_hash mismatch', recordId: record.record_id };
-      }
-      const expected = digestRecord(record);
-      if (record.record_hash !== expected) {
-        return { valid: false, records: index, reason: 'record_hash mismatch', recordId: record.record_id };
-      }
-      previousHash = record.record_hash;
-    }
-    return { valid: true, records: index, lastHash: previousHash };
+    await this.writeQueue;
+    if (this.initializePromise) await this.initializePromise;
+    return this.verifyContent(await this.readContent());
   }
 }

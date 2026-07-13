@@ -1,4 +1,4 @@
-FROM node:22-alpine AS runtime
+FROM node:22.16.0-alpine AS runtime
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
@@ -8,7 +8,10 @@ WORKDIR /app
 
 RUN addgroup -S altmanai && adduser -S altmanai -G altmanai
 
-COPY --chown=altmanai:altmanai package.json ./
+COPY --chown=altmanai:altmanai package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+    && npm cache clean --force
+
 COPY --chown=altmanai:altmanai src ./src
 COPY --chown=altmanai:altmanai scripts ./scripts
 COPY --chown=altmanai:altmanai config ./config
