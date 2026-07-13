@@ -75,7 +75,7 @@ jobs:
           version: ${{ env.FLYCTL_VERSION }}
 
       - name: Verify flyctl version
-        run: test "$(flyctl version | awk '{print $3}')" = "v${FLYCTL_VERSION}" || flyctl version
+        run: flyctl version | grep -F "v${FLYCTL_VERSION}"
 
       - name: Deploy with rolling replacement
         env:
