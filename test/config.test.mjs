@@ -10,7 +10,7 @@ const paths = {
   VERIFICATION_PATH: './config/verification.json'
 };
 
-test('loads verified development configuration', async () => {
+test('loads verified development configuration with safe ingress defaults', async () => {
   const config = await loadConfig({ NODE_ENV: 'development', ...paths });
   assert.equal(config.production, false);
   assert.equal(config.policy.checkName, 'AltmanAI Governance Gate');
@@ -19,6 +19,37 @@ test('loads verified development configuration', async () => {
   assert.equal(config.founderGitHubUserId, 233472124);
   assert.equal(config.aiPartnerName, 'AltmanAI Model 2.0');
   assert.equal(config.authorizationRecordId, 'ALTMANAI-CI-VERIFY-2026-07-13-001');
+  assert.equal(config.webhookRateLimitMax, 120);
+  assert.equal(config.webhookRateLimitWindowMs, 60_000);
+  assert.equal(config.trustProxyHeaders, false);
+});
+
+test('loads explicit production ingress controls', async () => {
+  const config = await loadConfig({
+    NODE_ENV: 'development',
+    ...paths,
+    WEBHOOK_RATE_LIMIT_MAX: '25',
+    WEBHOOK_RATE_LIMIT_WINDOW_MS: '30000',
+    TRUST_PROXY_HEADERS: 'true'
+  });
+  assert.equal(config.webhookRateLimitMax, 25);
+  assert.equal(config.webhookRateLimitWindowMs, 30_000);
+  assert.equal(config.trustProxyHeaders, true);
+});
+
+test('rejects unsafe ingress configuration values', async () => {
+  await assert.rejects(
+    loadConfig({ NODE_ENV: 'development', ...paths, WEBHOOK_RATE_LIMIT_WINDOW_MS: '3600001' }),
+    /must not exceed 3600000/
+  );
+  await assert.rejects(
+    loadConfig({ NODE_ENV: 'development', ...paths, WEBHOOK_RATE_LIMIT_MAX: '0' }),
+    /WEBHOOK_RATE_LIMIT_MAX must be a positive integer/
+  );
+  await assert.rejects(
+    loadConfig({ NODE_ENV: 'development', ...paths, TRUST_PROXY_HEADERS: 'sometimes' }),
+    /TRUST_PROXY_HEADERS must be true or false/
+  );
 });
 
 test('requires production webhook and GitHub App credentials', async () => {

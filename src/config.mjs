@@ -120,6 +120,9 @@ export async function loadConfig(env = process.env) {
     port: positiveInteger(env.PORT, 8080, 'PORT'),
     logLevel,
     maxBodyBytes: positiveInteger(env.MAX_BODY_BYTES, 1_048_576, 'MAX_BODY_BYTES'),
+    webhookRateLimitMax: positiveInteger(env.WEBHOOK_RATE_LIMIT_MAX, 120, 'WEBHOOK_RATE_LIMIT_MAX'),
+    webhookRateLimitWindowMs: positiveInteger(env.WEBHOOK_RATE_LIMIT_WINDOW_MS, 60_000, 'WEBHOOK_RATE_LIMIT_WINDOW_MS'),
+    trustProxyHeaders: booleanValue(env.TRUST_PROXY_HEADERS, false, 'TRUST_PROXY_HEADERS'),
     webhookSecret: env.WEBHOOK_SECRET || '',
     founderName: env.FOUNDER_NAME || verification.authorizing_human.name,
     founderGitHubLogin: env.FOUNDER_GITHUB_LOGIN || verification.authorizing_human.github_login,
@@ -148,6 +151,9 @@ export async function loadConfig(env = process.env) {
   };
 
   if (config.port > 65_535) throw new Error('PORT must be between 1 and 65535');
+  if (config.webhookRateLimitWindowMs > 3_600_000) {
+    throw new Error('WEBHOOK_RATE_LIMIT_WINDOW_MS must not exceed 3600000');
+  }
 
   if (production) {
     required(config.webhookSecret, 'WEBHOOK_SECRET');
