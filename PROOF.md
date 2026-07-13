@@ -46,12 +46,17 @@ npm run verify-backup
 
 The following targeted checks were executed against the Phase 1 changes on July 13, 2026:
 
-- JavaScript syntax validation passed for the modified application, configuration, test, and backup files.
-- Four webhook-route tests passed:
+- Nine targeted tests passed:
   - health status;
   - invalid-signature rejection;
   - previous-secret acceptance during controlled rotation;
-  - rate-limit rejection with `Retry-After`.
+  - rate-limit rejection with `Retry-After`;
+  - verified backup creation and restore;
+  - backup tamper rejection;
+  - default hardening configuration;
+  - explicit hardening configuration parsing;
+  - invalid trusted-proxy setting rejection.
+- JavaScript syntax validation passed for the modified application, configuration, test, and backup files.
 - A two-record evidence ledger verified successfully.
 - The ledger produced a compressed backup and manifest.
 - The restored backup passed compressed SHA-256, source SHA-256, record-count, final-hash, and full chain verification.
