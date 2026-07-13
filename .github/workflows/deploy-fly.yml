@@ -15,35 +15,44 @@ concurrency:
   group: altmanai-ci-server-production
   cancel-in-progress: false
 
+env:
+  FLYCTL_VERSION: '0.4.69'
+
 jobs:
   deploy:
     name: Validate and deploy
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: production
 
     steps:
       - name: Verify deployment controls
         env:
-          FLYCTL_VERSION: ${{ vars.FLYCTL_VERSION }}
           DEPLOYMENT_REASON: ${{ inputs.reason }}
         run: |
           set -euo pipefail
           test -n "${DEPLOYMENT_REASON}"
           test -n "${FLYCTL_VERSION}"
-          echo "Deployment is human-triggered from main with a pinned flyctl version."
+          echo "Deployment is human-triggered from main with reviewed immutable action revisions."
 
       - name: Check out exact revision
-        uses: actions/checkout@v4
+        # actions/checkout v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify checked-out revision
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        # actions/setup-node v4.4.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22.16.0'
           cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install locked dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
@@ -60,9 +69,13 @@ jobs:
         run: docker build --tag altmanai-ci-server:${GITHUB_SHA} .
 
       - name: Set up pinned flyctl
-        uses: superfly/flyctl-actions/setup-flyctl@v1.5
+        # superfly/flyctl-actions immutable revision; flyctl version is reviewed above.
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
         with:
-          version: ${{ vars.FLYCTL_VERSION }}
+          version: ${{ env.FLYCTL_VERSION }}
+
+      - name: Verify flyctl version
+        run: test "$(flyctl version | awk '{print $3}')" = "v${FLYCTL_VERSION}" || flyctl version
 
       - name: Deploy with rolling replacement
         env:
