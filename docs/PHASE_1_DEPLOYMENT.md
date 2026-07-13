@@ -180,15 +180,16 @@ fly ssh console -a altmanai-ci-server -C 'npm run backup-ledger'
 
 The command:
 
-- verifies the hash chain before backup;
-- refuses to back up a corrupt ledger;
-- writes an immutable timestamped NDJSON copy;
-- writes a SHA-256 manifest;
+- reads the live ledger once into an isolated candidate snapshot;
+- verifies the hash chain of those exact candidate bytes;
+- refuses to retain a corrupt or partial snapshot;
+- writes a timestamped, collision-resistant NDJSON copy;
+- writes a SHA-256 manifest containing record count and final chain hash;
 - applies configured retention to application-level backup copies.
 
 Run it after initial staging and before every material upgrade. Phase 2 must copy verified manifests and ledger snapshots to independent object storage with retention controls.
 
-Perform a snapshot recovery drill before production authorization. Record the snapshot identifier, restoration steps, verification output, and recovery time.
+Perform a snapshot recovery drill before production authorization. Record the snapshot identifier, restoration steps, verification output, and recovery time. Verify a restored application backup by setting `EVIDENCE_LEDGER_PATH` to the copied NDJSON file and running `npm run verify-ledger`; compare its digest to `content_sha256` in the paired manifest.
 
 ## 11. Monitoring
 
@@ -210,7 +211,8 @@ The repository includes `.github/workflows/deploy-fly.yml`. It is manual-only an
 - execution from `main`;
 - GitHub environment named `production` with required human reviewers;
 - secret `FLY_API_TOKEN`;
-- repository/environment variable `FLYCTL_VERSION` pinned to an approved version;
+- reviewed immutable commit pins for every action;
+- the reviewed `flyctl` version hard-coded in the workflow;
 - a human-entered deployment reason.
 
 Do not activate the workflow until the account-level GitHub-hosted runner restriction is resolved and a non-production manual run completes successfully.
