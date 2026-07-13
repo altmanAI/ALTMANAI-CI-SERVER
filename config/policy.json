@@ -1,0 +1,42 @@
+{
+  "$schema": "https://altmanai.tech/schemas/ci-policy-v1.json",
+  "policyVersion": "2026.07.13-v1",
+  "checkName": "AltmanAI Governance Gate",
+  "approvalMode": "material_changes",
+  "materialChangeFileThreshold": 10,
+  "maxChangedFiles": 250,
+  "requireAiDisclosure": true,
+  "aiDisclosureMarkers": [
+    "AltmanAI Model 2.0",
+    "AI-assisted",
+    "AI assistance"
+  ],
+  "requiredPrSections": [
+    "## What changed",
+    "## Validation",
+    "## Risk and rollback",
+    "## AI assistance",
+    "## Founder authorization"
+  ],
+  "protectedPathGlobs": [
+    ".github/**",
+    "src/**",
+    "config/**",
+    "Dockerfile",
+    "package.json",
+    "SECURITY.md",
+    "GOVERNANCE.md",
+    "PROOF.md",
+    "LICENSE.md"
+  ],
+  "forbiddenPathGlobs": [
+    ".env",
+    ".env.*",
+    "**/*.pem",
+    "**/*.key",
+    "**/id_rsa",
+    "**/id_ed25519",
+    "**/*credentials*.json",
+    "**/*service-account*.json"
+  ]
+}
