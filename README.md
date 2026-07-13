@@ -9,12 +9,17 @@
 ## Status
 
 **Version:** `0.1.0`  
-**Maturity:** functional foundation; not yet production-certified  
+**Maturity:** functional foundation with Phase 1 production deployment package; not yet production-certified  
 **Runtime:** Node.js 22+, zero runtime package dependencies
+
+Production use requires completion of the staged deployment, GitHub App installation, restore drill, self-governance matrix, monitoring setup, and Founder-approved branch protection described in the deployment runbooks.
 
 ## Core controls
 
 - HMAC-SHA256 validation of the untouched GitHub webhook body
+- Controlled overlap for webhook-secret rotation
+- Configurable per-client webhook rate limiting
+- Request-body size enforcement
 - Exact Founder approval gate for material changes
 - Required PR evidence, rollback, and AI-assistance disclosure sections
 - Credential and private-key path blocking
@@ -22,8 +27,27 @@
 - Hash-chained NDJSON evidence records
 - Duplicate delivery detection
 - Repository-owner allowlisting
+- Structured JSON logging
 - Health, readiness, and non-sensitive status endpoints
 - Container-first deployment and first-party test coverage
+
+## Phase 1 production package
+
+The repository now includes:
+
+- hardened non-root `Dockerfile` with `tini` and readiness healthcheck;
+- `docker-compose.yml` with a read-only root filesystem, dropped capabilities, and persistent data volume;
+- `fly.toml` with forced HTTPS, persistent storage, automatic daily snapshots, 30-day retention, health checks, and capacity limits;
+- verified ledger backup and restore tooling;
+- a manual Fly.io deployment workflow staged for use after GitHub-hosted Actions execution is restored;
+- least-privilege GitHub App setup and credential-rotation instructions;
+- deployment, operations, monitoring, incident, rollback, and restore procedures.
+
+Start with:
+
+- [`docs/PHASE_1_DEPLOYMENT.md`](docs/PHASE_1_DEPLOYMENT.md)
+- [`docs/GITHUB_APP_PRODUCTION.md`](docs/GITHUB_APP_PRODUCTION.md)
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
 
 ## Approval semantics
 
@@ -39,6 +63,9 @@ The phrase cannot be inferred, generated, substituted, embedded in a longer sent
 
 ```text
 GitHub App webhook
+        |
+        v
+Rate limit + body limit
         |
         v
 Signature validation
@@ -70,6 +97,7 @@ Other events are acknowledged and recorded as ignored.
 ```bash
 cp .env.example .env
 set -a && source .env && set +a
+npm ci --ignore-scripts --no-audit --no-fund
 npm test
 npm start
 ```
@@ -84,7 +112,7 @@ curl http://localhost:8080/v1/status
 
 ## GitHub App configuration
 
-Create a GitHub App owned by the AltmanAI organization and configure:
+Create a GitHub App owned by the account or organization that controls the protected AltmanAI repositories.
 
 **Repository permissions**
 
@@ -105,37 +133,40 @@ Create a GitHub App owned by the AltmanAI organization and configure:
 https://<your-ci-host>/webhooks/github
 ```
 
-Store the webhook secret and GitHub App private key in the deployment platform's secret manager. Never place them in source control.
+Store the webhook secret and GitHub App private key in the deployment platform's secret manager. Never place them in source control. Follow the complete procedure in [`docs/GITHUB_APP_PRODUCTION.md`](docs/GITHUB_APP_PRODUCTION.md).
 
 ## Configuration
 
-The enforcement policy is versioned in [`config/policy.json`](config/policy.json). Runtime settings are environment variables documented in [`.env.example`](.env.example).
+The enforcement policy is versioned in [`config/policy.json`](config/policy.json). Runtime settings are documented in [`.env.example`](.env.example).
 
-The production authentication path uses a GitHub App ID and private key to mint short-lived installation tokens. `GITHUB_TOKEN` exists only as a local-development fallback.
+The production authentication path uses a GitHub App ID and private key to mint short-lived installation tokens. `GITHUB_TOKEN` exists only as a local-development fallback and must remain unset in production.
 
-## Test and verification commands
+## Test, proof, and backup commands
 
 ```bash
 npm run check
 npm test
 npm run smoke
 npm run verify-ledger
+npm run backup-ledger
+npm run verify-backup
 ```
 
 ## Deployment
 
-Build and run locally:
+Local production rehearsal:
 
 ```bash
-docker build -t altmanai-ci-server:0.1.0 .
-docker run --rm -p 8080:8080 --env-file .env altmanai-ci-server:0.1.0
+docker compose up --build -d
+curl --fail http://127.0.0.1:8080/readyz
+docker compose down
 ```
 
-Production requirements and hardening steps are documented in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+The recommended Phase 1 production target is Fly.io with a persistent encrypted volume. Railway is documented as an alternative. See [`docs/PHASE_1_DEPLOYMENT.md`](docs/PHASE_1_DEPLOYMENT.md).
 
 ## Evidence boundaries
 
-The ledger demonstrates whether stored records were altered after creation. It does not replace durable external storage, independent timestamping, branch protection, GitHub audit logs, or legal review. Production should ship ledger records to immutable object storage or a database with retention controls.
+The ledger demonstrates whether stored records were altered after creation. Fly volume snapshots and verified compressed backups improve recoverability, but they do not replace independent immutable object storage, shared multi-instance state, GitHub audit logs, penetration testing, or legal review. Phase 2 must move the evidence layer to object-lock storage or a managed shared database.
 
 ## Governance
 
