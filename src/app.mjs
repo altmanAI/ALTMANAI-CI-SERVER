@@ -71,6 +71,11 @@ function createFixedWindowRateLimiter({ windowMs, max }) {
   };
 }
 
+function validWebhookSignature(config, signatureHeader, rawBody) {
+  const secrets = [config.webhookSecret, config.webhookSecretPrevious].filter(Boolean);
+  return secrets.some((secret) => verifyGitHubSignature({ secret, signatureHeader, rawBody }));
+}
+
 export function createApp({ config, processor, ledger, logger, startedAt = Date.now() }) {
   const webhookRateLimiter = createFixedWindowRateLimiter({
     windowMs: config.webhookRateLimitWindowMs || 60_000,
@@ -123,11 +128,7 @@ export function createApp({ config, processor, ledger, logger, startedAt = Date.
 
         const rawBody = await readBody(req, config.maxBodyBytes);
         const signatureHeader = req.headers['x-hub-signature-256'];
-        if (!verifyGitHubSignature({
-          secret: config.webhookSecret,
-          signatureHeader,
-          rawBody
-        })) {
+        if (!validWebhookSignature(config, signatureHeader, rawBody)) {
           logger.warn('Webhook signature rejected', { requestId, remoteAddress });
           return json(res, 401, { error: 'invalid_webhook_signature', requestId });
         }
