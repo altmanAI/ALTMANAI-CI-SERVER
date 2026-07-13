@@ -11,8 +11,9 @@
     "start": "node src/server.mjs",
     "dev": "NODE_ENV=development node --watch src/server.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "find src test -name '*.mjs' -print0 | xargs -0 -n1 node --check",
+    "check": "find src test scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check",
     "verify-ledger": "node scripts/verify-ledger.mjs",
+    "backup-ledger": "node scripts/backup-ledger.mjs",
     "smoke": "node scripts/smoke-test.mjs"
   },
   "license": "UNLICENSED"
