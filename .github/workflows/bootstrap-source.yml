@@ -1,0 +1,52 @@
+name: Bootstrap AltmanAI CI Server Source
+
+on:
+  push:
+    branches:
+      - source-v0-1-0
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out deployment branch
+        uses: actions/checkout@v4
+        with:
+          ref: source-v0-1-0
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download and verify approved source
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL "https://github.com/ALTMANAI-BY-ALTMAN-FAMILY-GROUP-LLC/ALTMANAI-CI-SERVER/raw/refs/heads/main/altmanai-ci-server-v0.1.0.zip" -o /tmp/altmanai-ci-server-v0.1.0.zip
+          echo "5f241515aa188b580c93b5d3621a7fa1ce4fa9da9f5f674bbe1576d12a822274  /tmp/altmanai-ci-server-v0.1.0.zip" | sha256sum --check --strict
+          rm -rf /tmp/altmanai-ci-source
+          mkdir -p /tmp/altmanai-ci-source
+          unzip -q /tmp/altmanai-ci-server-v0.1.0.zip -d /tmp/altmanai-ci-source
+          cp -a /tmp/altmanai-ci-source/altmanai-ci-server/. .
+          rm -f .github/workflows/bootstrap-source.yml
+
+      - name: Validate source
+        run: |
+          npm run check
+          npm test
+
+      - name: Commit deployed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "AltmanAI Model 2.0"
+          git config user.email "SUPPORT@ALTMANAI.TECH"
+          git add -A
+          git commit -m "Deploy AltmanAI CI Server v0.1.0"
+          git push origin HEAD:source-v0-1-0
