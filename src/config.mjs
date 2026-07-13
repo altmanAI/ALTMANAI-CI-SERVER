@@ -56,6 +56,7 @@ export async function loadConfig(env = process.env) {
     ),
     trustProxyHeaders: booleanValue(env.TRUST_PROXY_HEADERS, false, 'TRUST_PROXY_HEADERS'),
     webhookSecret: env.WEBHOOK_SECRET || '',
+    webhookSecretPrevious: env.WEBHOOK_SECRET_PREVIOUS || '',
     founderGitHubLogin: env.FOUNDER_GITHUB_LOGIN || '',
     founderApprovalPhrase: env.FOUNDER_APPROVAL_PHRASE || 'All Clear for Impact',
     allowedGitHubOwner: env.ALLOWED_GITHUB_OWNER || '',
