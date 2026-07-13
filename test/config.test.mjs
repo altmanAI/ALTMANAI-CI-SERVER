@@ -19,6 +19,34 @@ test('loads verified development configuration', async () => {
   assert.equal(config.founderGitHubUserId, 233472124);
   assert.equal(config.aiPartnerName, 'AltmanAI Model 2.0');
   assert.equal(config.authorizationRecordId, 'ALTMANAI-CI-VERIFY-2026-07-13-001');
+  assert.equal(config.webhookRateLimitMax, 120);
+  assert.equal(config.webhookRateLimitWindowMs, 60_000);
+  assert.equal(config.trustProxyHeaders, false);
+  assert.equal(config.ledgerBackupRetentionDays, 30);
+});
+
+test('parses Phase 1 hardening settings', async () => {
+  const config = await loadConfig({
+    NODE_ENV: 'development',
+    ...paths,
+    WEBHOOK_RATE_LIMIT_MAX: '25',
+    WEBHOOK_RATE_LIMIT_WINDOW_MS: '5000',
+    TRUST_PROXY_HEADERS: 'true',
+    LEDGER_BACKUP_RETENTION_DAYS: '14',
+    WEBHOOK_SECRET_PREVIOUS: 'old-secret'
+  });
+  assert.equal(config.webhookRateLimitMax, 25);
+  assert.equal(config.webhookRateLimitWindowMs, 5000);
+  assert.equal(config.trustProxyHeaders, true);
+  assert.equal(config.ledgerBackupRetentionDays, 14);
+  assert.equal(config.webhookSecretPrevious, 'old-secret');
+});
+
+test('rejects invalid trusted proxy setting', async () => {
+  await assert.rejects(
+    loadConfig({ NODE_ENV: 'development', ...paths, TRUST_PROXY_HEADERS: 'sometimes' }),
+    /TRUST_PROXY_HEADERS must be true or false/
+  );
 });
 
 test('requires production webhook and GitHub App credentials', async () => {
