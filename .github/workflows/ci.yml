@@ -1,10 +1,9 @@
-name: CI
+# Temporary containment: GitHub-hosted jobs are currently failing before the
+# first step across multiple altmanAI repositories. Keep this workflow manual
+# until the repository/account Actions restriction is cleared in GitHub.
+name: CI (manual while hosted runners are restricted)
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,20 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  runner-diagnostic:
-    name: GitHub-hosted runner diagnostic
-    runs-on: ubuntu-22.04
-    timeout-minutes: 5
-    steps:
-      - name: Confirm runner execution
-        run: |
-          echo "GitHub-hosted runner started successfully."
-          uname -a
-          env | sort | grep '^GITHUB_' | sed -E 's/(TOKEN|SECRET|KEY)=.*/\1=[REDACTED]/' || true
-
   validate:
     name: Validate Node service
-    needs: runner-diagnostic
     runs-on: ubuntu-22.04
     timeout-minutes: 15
 
