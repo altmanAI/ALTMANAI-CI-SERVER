@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { EvidenceLedger } from '../src/evidence-ledger.mjs';
@@ -19,9 +19,13 @@ async function readLedger(path) {
 }
 
 async function atomicWrite(path, content) {
-  const temporaryPath = `${path}.tmp-${process.pid}`;
-  await writeFile(temporaryPath, content, { mode: 0o600, flag: 'wx' });
-  await rename(temporaryPath, path);
+  const temporaryPath = `${path}.tmp-${randomUUID()}`;
+  try {
+    await writeFile(temporaryPath, content, { mode: 0o600, flag: 'wx' });
+    await rename(temporaryPath, path);
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
 }
 
 async function pruneExpiredBackups(directory, retentionDays, now = Date.now()) {
@@ -47,40 +51,54 @@ const retentionDays = positiveInteger(
   'EVIDENCE_BACKUP_RETENTION_DAYS'
 );
 
-const ledger = new EvidenceLedger(ledgerPath);
-const verification = await ledger.verify();
-if (!verification.valid) {
-  throw new Error(`Refusing to back up an invalid evidence ledger: ${verification.reason}`);
-}
-
 await mkdir(backupDirectory, { recursive: true, mode: 0o700 });
+
+// Read the live file exactly once. The copied bytes—not a later read of the
+// source—are what this command verifies, hashes, and retains.
 const content = await readLedger(ledgerPath);
 const createdAt = new Date().toISOString();
 const safeTimestamp = createdAt.replace(/[:.]/g, '-');
-const stem = `evidence-${safeTimestamp}`;
+const stem = `evidence-${safeTimestamp}-${randomUUID()}`;
+const stagedSnapshotPath = join(backupDirectory, `.${stem}.snapshot.tmp`);
 const backupPath = join(backupDirectory, `${stem}.ndjson`);
 const manifestPath = join(backupDirectory, `${stem}.manifest.json`);
-const contentSha256 = createHash('sha256').update(content).digest('hex');
 
-const manifest = {
-  schema_version: '1.0',
-  created_at: createdAt,
-  source_file: basename(ledgerPath),
-  backup_file: basename(backupPath),
-  bytes: content.length,
-  content_sha256: contentSha256,
-  ledger_verification: verification,
-  retention_days: retentionDays
-};
+let backupCommitted = false;
+try {
+  await writeFile(stagedSnapshotPath, content, { mode: 0o600, flag: 'wx' });
 
-await atomicWrite(backupPath, content);
-await atomicWrite(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-const removedFiles = await pruneExpiredBackups(backupDirectory, retentionDays);
+  const verification = await new EvidenceLedger(stagedSnapshotPath).verify();
+  if (!verification.valid) {
+    throw new Error(`Refusing to back up an invalid evidence ledger snapshot: ${verification.reason}`);
+  }
 
-console.log(JSON.stringify({
-  status: 'backup_created',
-  backupPath,
-  manifestPath,
-  removedFiles,
-  ...manifest
-}, null, 2));
+  const contentSha256 = createHash('sha256').update(content).digest('hex');
+  const manifest = {
+    schema_version: '1.1',
+    created_at: createdAt,
+    source_file: basename(ledgerPath),
+    backup_file: basename(backupPath),
+    bytes: content.length,
+    content_sha256: contentSha256,
+    ledger_verification: verification,
+    retention_days: retentionDays
+  };
+
+  await rename(stagedSnapshotPath, backupPath);
+  backupCommitted = true;
+  await atomicWrite(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const removedFiles = await pruneExpiredBackups(backupDirectory, retentionDays);
+
+  console.log(JSON.stringify({
+    status: 'backup_created',
+    backupPath,
+    manifestPath,
+    removedFiles,
+    ...manifest
+  }, null, 2));
+} catch (error) {
+  if (backupCommitted) await rm(backupPath, { force: true });
+  throw error;
+} finally {
+  await rm(stagedSnapshotPath, { force: true });
+}
