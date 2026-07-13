@@ -2,7 +2,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { verifyGitHubSignature, sha256 } from './crypto.mjs';
 
-function json(res, status, body) {
+function json(res, status, body, extraHeaders = {}) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -11,7 +11,8 @@ function json(res, status, body) {
     'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
-    'Referrer-Policy': 'no-referrer'
+    'Referrer-Policy': 'no-referrer',
+    ...extraHeaders
   });
   res.end(payload);
 }
@@ -40,10 +41,61 @@ function requestIdentifier(value) {
   return candidate && candidate.length <= 128 ? candidate : randomUUID();
 }
 
+function clientAddress(req, trustProxyHeaders) {
+  if (trustProxyHeaders) {
+    const flyClientIp = headerString(req.headers['fly-client-ip']).trim();
+    if (flyClientIp) return flyClientIp;
+    const forwarded = headerString(req.headers['x-forwarded-for']).trim();
+    if (forwarded) return forwarded.split(',')[0].trim();
+  }
+  return req.socket.remoteAddress || 'unknown';
+}
+
+function createFixedWindowRateLimiter({ windowMs, max }) {
+  const buckets = new Map();
+
+  return {
+    consume(key, now = Date.now()) {
+      if (buckets.size > 10_000) {
+        for (const [bucketKey, bucket] of buckets) {
+          if (bucket.resetAt <= now) buckets.delete(bucketKey);
+        }
+      }
+
+      let bucket = buckets.get(key);
+      if (!bucket || bucket.resetAt <= now) {
+        bucket = { count: 0, resetAt: now + windowMs };
+        buckets.set(key, bucket);
+      }
+
+      if (bucket.count >= max) {
+        return {
+          allowed: false,
+          retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))
+        };
+      }
+
+      bucket.count += 1;
+      return { allowed: true, remaining: Math.max(0, max - bucket.count) };
+    }
+  };
+}
+
+function validWebhookSignature(config, signatureHeader, rawBody) {
+  const secrets = [config.webhookSecret, config.webhookSecretPrevious].filter(Boolean);
+  return secrets.some((secret) => verifyGitHubSignature({ secret, signatureHeader, rawBody }));
+}
+
 export function createApp({ config, processor, ledger, logger, startedAt = Date.now() }) {
+  const webhookRateLimiter = createFixedWindowRateLimiter({
+    windowMs: config.webhookRateLimitWindowMs || 60_000,
+    max: config.webhookRateLimitMax || 120
+  });
+
   return createHttpServer(async (req, res) => {
     const requestId = requestIdentifier(req.headers['x-request-id']);
     const started = Date.now();
+    const remoteAddress = clientAddress(req, Boolean(config.trustProxyHeaders));
     try {
       if (req.method === 'GET' && req.url === '/healthz') {
         return json(res, 200, { status: 'ok', service: config.serviceName, version: config.serviceVersion });
@@ -76,6 +128,21 @@ export function createApp({ config, processor, ledger, logger, startedAt = Date.
       }
 
       if (req.method === 'POST' && req.url === '/webhooks/github') {
+        const rateLimit = webhookRateLimiter.consume(remoteAddress);
+        if (!rateLimit.allowed) {
+          logger.warn('Webhook rate limit exceeded', {
+            requestId,
+            remoteAddress,
+            retryAfterSeconds: rateLimit.retryAfterSeconds
+          });
+          return json(
+            res,
+            429,
+            { error: 'rate_limit_exceeded', requestId },
+            { 'Retry-After': String(rateLimit.retryAfterSeconds) }
+          );
+        }
+
         const event = headerString(req.headers['x-github-event']).trim();
         const deliveryId = headerString(req.headers['x-github-delivery']).trim();
         if (!event || !deliveryId) {
@@ -84,11 +151,8 @@ export function createApp({ config, processor, ledger, logger, startedAt = Date.
 
         const rawBody = await readBody(req, config.maxBodyBytes);
         const signatureHeader = headerString(req.headers['x-hub-signature-256']);
-        if (!verifyGitHubSignature({
-          secret: config.webhookSecret,
-          signatureHeader,
-          rawBody
-        })) {
+        if (!validWebhookSignature(config, signatureHeader, rawBody)) {
+          logger.warn('Webhook signature rejected', { requestId, remoteAddress });
           return json(res, 401, { error: 'invalid_webhook_signature', requestId });
         }
 
@@ -109,6 +173,7 @@ export function createApp({ config, processor, ledger, logger, startedAt = Date.
         requestId,
         method: req.method,
         url: req.url,
+        remoteAddress,
         error: error.message,
         status: error.status || 500
       });
@@ -121,6 +186,7 @@ export function createApp({ config, processor, ledger, logger, startedAt = Date.
         requestId,
         method: req.method,
         url: req.url,
+        remoteAddress,
         durationMs: Date.now() - started
       });
     }
