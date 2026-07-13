@@ -1,0 +1,58 @@
+# Manual-only until GitHub-hosted Actions execution is restored for altmanAI.
+name: Deploy to Fly.io
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Human-approved deployment reason
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-fly-deploy
+  cancel-in-progress: false
+
+jobs:
+  validate-and-deploy:
+    name: Validate and deploy production
+    runs-on: ubuntu-22.04
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependency graph
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Validate source and tests
+        run: |
+          npm run check
+          npm test
+          docker build --tag altmanai-ci-server:${{ github.sha }} .
+
+      - name: Set up flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+        with:
+          version: 0.4.69
+
+      - name: Deploy reviewed revision
+        run: flyctl deploy --remote-only --strategy rolling
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Verify deployed readiness
+        run: flyctl checks list --app altmanai-ci-server
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
