@@ -8,22 +8,47 @@
 
 ## Status
 
-**Version:** `0.2.0`
-**Maturity:** functional foundation; not yet production-certified
+**Version:** `0.2.0`  
+**Maturity:** verified functional foundation with a staged Phase 1 production package; not yet production-certified  
 **Runtime:** Node.js 22+, zero runtime package dependencies
 
 ## Core controls
 
-- HMAC-SHA256 validation of the untouched GitHub webhook body
-- Founder approval bound to the exact `altmanAI` login and immutable GitHub user ID `233472124`
+- HMAC-SHA256 validation of untouched GitHub webhook bytes
+- Controlled previous-secret overlap for safe webhook rotation
+- Configurable per-client webhook rate limiting
+- Request-body size enforcement
+- Founder approval bound to login `altmanAI` and immutable GitHub user ID `233472124`
+- Repository-backed Blake Hunter Altman × AltmanAI Model 2.0 verification record
 - Required PR evidence, rollback, and AI-assistance disclosure sections
 - Credential and private-key path blocking
+- GitHub App authentication with static-token fail-closed behavior
+- GitHub API timeout, retry, pagination, and response-handling controls
 - GitHub Checks API reporting
-- Hash-chained NDJSON evidence records
-- Concurrent and ledger-backed duplicate delivery detection
+- Concurrent, hash-chained NDJSON evidence records
+- Duplicate-delivery protection
 - Repository-owner allowlisting
-- Health, readiness, status, and repository-backed verification endpoints
+- Structured JSON logging
+- Health, readiness, status, and verification endpoints
 - Container-first deployment and first-party test coverage
+
+## Phase 1 production package
+
+The repository includes:
+
+- hardened non-root `Dockerfile` with `tini` and ledger-backed readiness healthcheck;
+- `docker-compose.yml` with read-only root filesystem, dropped capabilities, and persistent storage;
+- `fly.toml` with HTTPS, a persistent volume, scheduled snapshots, health checks, and capacity limits;
+- verified evidence backup and restore tooling;
+- a manually dispatched, production-environment-gated Fly.io deployment workflow with immutable action pins;
+- least-privilege GitHub App setup and credential-rotation instructions;
+- deployment, monitoring, incident, rollback, backup, and restore runbooks.
+
+Start with:
+
+- [`docs/PHASE_1_DEPLOYMENT.md`](docs/PHASE_1_DEPLOYMENT.md)
+- [`docs/GITHUB_APP_PRODUCTION.md`](docs/GITHUB_APP_PRODUCTION.md)
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
 
 ## Approval semantics
 
@@ -41,7 +66,10 @@ The phrase cannot be inferred, generated, substituted, embedded in a longer sent
 GitHub App webhook
         |
         v
-Signature validation
+Rate limit + body limit
+        |
+        v
+Header + signature validation
         |
         v
 Event normalization ----> ignored-event evidence record
@@ -70,6 +98,7 @@ Other events are acknowledged and recorded as ignored.
 ```bash
 cp .env.example .env
 set -a && source .env && set +a
+npm ci --ignore-scripts --no-audit --no-fund
 npm test
 npm start
 ```
@@ -85,8 +114,6 @@ curl http://localhost:8080/v1/verification
 
 ## GitHub App configuration
 
-Create a GitHub App owned by the AltmanAI organization and configure:
-
 **Repository permissions**
 
 - Checks: read and write
@@ -95,7 +122,7 @@ Create a GitHub App owned by the AltmanAI organization and configure:
 - Metadata: read
 - Pull requests: read
 
-**Subscribe to events**
+**Event subscriptions**
 
 - Pull request
 - Issue comment
@@ -106,37 +133,40 @@ Create a GitHub App owned by the AltmanAI organization and configure:
 https://<your-ci-host>/webhooks/github
 ```
 
-Store the webhook secret and GitHub App private key in the deployment platform's secret manager. Never place them in source control.
+Store the webhook secret and GitHub App private key only in the deployment platform's secret manager. Follow [`docs/GITHUB_APP_PRODUCTION.md`](docs/GITHUB_APP_PRODUCTION.md).
 
 ## Configuration
 
-The enforcement policy is versioned in [`config/policy.json`](config/policy.json). The Blake Hunter Altman × AltmanAI Model 2.0 authorization record is stored in [`config/verification.json`](config/verification.json), with a human-readable copy in [`VERIFICATION.md`](VERIFICATION.md). Runtime settings are documented in [`.env.example`](.env.example).
+The enforcement policy is versioned in [`config/policy.json`](config/policy.json). The authorization record is stored in [`config/verification.json`](config/verification.json), with a human-readable copy in [`VERIFICATION.md`](VERIFICATION.md). Runtime settings are documented in [`.env.example`](.env.example).
 
-The production authentication path uses a GitHub App ID and private key to mint and cache short-lived installation tokens. Static `GITHUB_TOKEN` use is rejected in production unless `ALLOW_STATIC_GITHUB_TOKEN=true` is explicitly configured.
+Production uses a GitHub App ID and private key to mint short-lived installation tokens. Static `GITHUB_TOKEN` use is rejected unless an explicit, documented emergency exception enables it.
 
-## Test and verification commands
+## Test, evidence, and backup commands
 
 ```bash
 npm run check
 npm test
 npm run smoke
 npm run verify-ledger
+npm run backup-ledger
+npm run verify-backup
 ```
 
 ## Deployment
 
-Build and run locally:
+Local production rehearsal:
 
 ```bash
-docker build -t altmanai-ci-server:0.2.0 .
-docker run --rm -p 8080:8080 --env-file .env altmanai-ci-server:0.2.0
+docker compose up --build -d
+curl --fail http://127.0.0.1:8080/readyz
+docker compose down
 ```
 
-Production requirements and hardening steps are documented in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+The recommended Phase 1 target is Fly.io with persistent encrypted storage. Railway is documented as an alternative. See [`docs/PHASE_1_DEPLOYMENT.md`](docs/PHASE_1_DEPLOYMENT.md).
 
 ## Evidence boundaries
 
-The ledger demonstrates whether stored records were altered after creation. It does not replace durable external storage, independent timestamping, branch protection, GitHub audit logs, or legal review. Production should ship ledger records to immutable object storage or a database with retention controls.
+The ledger detects alteration of stored records. Persistent volumes, scheduled snapshots, and verified compressed backups improve recoverability, but they do not replace external immutable storage, shared multi-instance state, GitHub audit logs, penetration testing, or legal review. Phase 2 must move evidence to object-lock storage or a managed shared database.
 
 ## Governance
 
