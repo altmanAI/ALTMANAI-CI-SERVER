@@ -28,9 +28,11 @@ The Phase 1 hardening branch adds executable coverage for:
 - signed webhook processing under rate-limit controls
 - HTTP 429 rejection and retry metadata after abusive bursts
 - trusted Fly client-address handling only when explicitly enabled
-- verified timestamped evidence backup creation
+- rate-limit and trusted-proxy configuration boundaries
+- exact copied-snapshot evidence verification
+- collision-resistant backup naming
 - SHA-256 backup-manifest validation
-- refusal to back up a tampered ledger
+- refusal to retain a tampered ledger snapshot
 
 ## Validation commands
 
@@ -46,7 +48,7 @@ npm pack --dry-run
 
 The July 13, 2026 v0.2.0 audit completed **38 tests with 38 passes and 0 failures** on Node.js `v22.16.0`.
 
-Phase 1 changed-component validation and its limitations are recorded in [`docs/PHASE_1_BUILD_REPORT.md`](docs/PHASE_1_BUILD_REPORT.md).
+Phase 1 changed-component validation completed **17 tests with 17 passes and 0 failures** on Node.js `v22.16.0`. The exact scope and execution limitations are recorded in [`docs/PHASE_1_BUILD_REPORT.md`](docs/PHASE_1_BUILD_REPORT.md).
 
 ## Authorization proof
 
@@ -56,7 +58,7 @@ The exact Blake Hunter Altman verification statement and its SHA-256 digest are 
 
 Runtime evidence is written as newline-delimited JSON. Each record includes `previous_hash` and `record_hash`, creating a linear SHA-256 hash chain. Governance decisions also record the authorizing human, immutable GitHub user ID, AI execution partner, and authorization record ID.
 
-Phase 1 backups preserve the complete NDJSON ledger and add a separate manifest containing the content SHA-256, record count, last chain hash, creation time, and retention policy.
+Phase 1 backups preserve the exact copied NDJSON snapshot bytes and add a paired manifest containing the content SHA-256, record count, last chain hash, creation time, and retention policy.
 
 ## Limitations
 
