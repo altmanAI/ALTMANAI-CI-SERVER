@@ -70,7 +70,7 @@ Logs are structured JSON and must be exported to a retention-controlled sink bef
 Phase 1 uses two layers:
 
 1. Fly Volume automatic daily snapshots with 30-day retention.
-2. `npm run backup-ledger`, which verifies the hash chain and writes a timestamped NDJSON copy plus SHA-256 manifest.
+2. `npm run backup-ledger`, which reads the live ledger once, verifies the exact copied snapshot bytes, and writes a timestamped NDJSON copy plus SHA-256 manifest.
 
 Application-level backups remain on the same volume. Phase 2 must replicate verified backups to independent retention-controlled object storage or a managed database.
 
@@ -80,4 +80,4 @@ Use `GITHUB_APP_ID` and `GITHUB_PRIVATE_KEY` in production. Static `GITHUB_TOKEN
 
 ## Deployment workflow
 
-`.github/workflows/deploy-fly.yml` is a human-triggered production workflow with an environment approval gate. It remains inactive until GitHub-hosted runner execution is restored and the `production` environment, `FLY_API_TOKEN` secret, and pinned `FLYCTL_VERSION` variable are configured.
+`.github/workflows/deploy-fly.yml` is a human-triggered production workflow with an environment approval gate. It remains inactive until GitHub-hosted runner execution is restored and the `production` environment plus `FLY_API_TOKEN` secret are configured. Every action is pinned to an immutable commit and the reviewed `flyctl` version is hard-coded in the workflow.
