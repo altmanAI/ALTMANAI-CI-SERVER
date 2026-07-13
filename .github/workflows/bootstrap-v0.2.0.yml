@@ -1,0 +1,62 @@
+name: Bootstrap audited v0.2.0 source
+
+on:
+  push:
+    branches: [audit-v0-2-0]
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Clone deployment branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone --depth=1 --branch "${GITHUB_REF_NAME}" "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+
+      - name: Verify and extract audited source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd repo
+          echo "b6ce0797dfcabb4ac5221471e0c7359e0f0bd1c0e7dcf13cc840592bac1e79f7  altmanai-ci-server-v0.2.0.zip" | sha256sum --check --strict
+          temp_dir="$(mktemp -d)"
+          unzip -q altmanai-ci-server-v0.2.0.zip -d "${temp_dir}"
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a "${temp_dir}/." .
+          rm -rf "${temp_dir}"
+
+      - name: Validate with pinned Node 22
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -v "${PWD}/repo:/workspace" -w /workspace node:22.16.0-bookworm-slim sh -lc '
+            npm ci --ignore-scripts --no-audit --no-fund &&
+            npm run check &&
+            npm test &&
+            npm run smoke &&
+            npm run verify-ledger &&
+            npm pack --dry-run
+          '
+
+      - name: Build production container
+        run: docker build --tag altmanai-ci-server:0.2.0 repo
+
+      - name: Commit verified source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd repo
+          git config user.name "AltmanAI Model 2.0"
+          git config user.email "SUPPORT@ALTMANAI.TECH"
+          git add -A
+          git commit -m "Harden AltmanAI CI Server v0.2.0"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:"${GITHUB_REF_NAME}"

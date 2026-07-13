@@ -1,7 +1,0 @@
-.git
-.github
-node_modules
-coverage
-data/*.ndjson
-.env*
-*.log

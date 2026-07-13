@@ -1,9 +1,0 @@
-.env
-.env.*
-!.env.example
-node_modules/
-coverage/
-.DS_Store
-*.log
-data/*.ndjson
-!data/.gitkeep
