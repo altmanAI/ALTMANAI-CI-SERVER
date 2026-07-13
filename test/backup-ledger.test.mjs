@@ -23,7 +23,7 @@ async function runBackup(ledgerPath, backupDirectory, retentionDays = '30') {
   });
 }
 
-test('backup command verifies the ledger and writes a matching SHA-256 manifest', async () => {
+test('backup command verifies the exact retained bytes and writes a matching SHA-256 manifest', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'altmanai-backup-'));
   const ledgerPath = join(directory, 'evidence.ndjson');
   const backupDirectory = join(directory, 'backups');
@@ -35,8 +35,11 @@ test('backup command verifies the ledger and writes a matching SHA-256 manifest'
   const result = JSON.parse(stdout);
   const backup = await readFile(result.backupPath);
   const manifest = JSON.parse(await readFile(result.manifestPath, 'utf8'));
+  const retainedVerification = await new EvidenceLedger(result.backupPath).verify();
 
   assert.equal(result.status, 'backup_created');
+  assert.equal(manifest.schema_version, '1.1');
+  assert.deepEqual(manifest.ledger_verification, retainedVerification);
   assert.equal(manifest.ledger_verification.valid, true);
   assert.equal(manifest.ledger_verification.records, 2);
   assert.equal(
@@ -46,7 +49,20 @@ test('backup command verifies the ledger and writes a matching SHA-256 manifest'
   assert.equal(backup.toString('utf8'), await readFile(ledgerPath, 'utf8'));
 });
 
-test('backup command refuses a tampered ledger', async () => {
+test('backups use collision-resistant names for repeated snapshots', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'altmanai-backup-unique-'));
+  const ledgerPath = join(directory, 'evidence.ndjson');
+  const backupDirectory = join(directory, 'backups');
+  await new EvidenceLedger(ledgerPath).append({ delivery_id: 'backup-unique', decision: 'accepted' });
+
+  const first = JSON.parse((await runBackup(ledgerPath, backupDirectory)).stdout);
+  const second = JSON.parse((await runBackup(ledgerPath, backupDirectory)).stdout);
+
+  assert.notEqual(first.backupPath, second.backupPath);
+  assert.notEqual(first.manifestPath, second.manifestPath);
+});
+
+test('backup command refuses a tampered ledger snapshot', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'altmanai-backup-corrupt-'));
   const ledgerPath = join(directory, 'evidence.ndjson');
   const backupDirectory = join(directory, 'backups');
@@ -58,6 +74,6 @@ test('backup command refuses a tampered ledger', async () => {
 
   await assert.rejects(
     runBackup(ledgerPath, backupDirectory),
-    /Refusing to back up an invalid evidence ledger/
+    /Refusing to back up an invalid evidence ledger snapshot/
   );
 });
