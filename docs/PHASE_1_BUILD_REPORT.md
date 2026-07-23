@@ -15,7 +15,7 @@
 - validated ingress configuration bounds
 - hardened non-root container metadata and filesystem paths
 - Fly.io persistent evidence volume
-- daily Fly Volume snapshots with 30-day retention
+- daily Fly volume snapshots with 30-day retention
 - bounded automatic volume growth
 - health and full-ledger readiness checks
 - hardened Docker Compose reference
@@ -66,7 +66,7 @@ The unchanged v0.2.0 base release previously completed:
 
 ## Validation limitations
 
-The local execution environment could not resolve GitHub from its shell, so it could not clone and execute the entire branch as one checkout. The changed executable components were reconstructed from the exact authenticated GitHub branch contents and tested directly.
+The local execution environment could not resolve GitHub from its shell, so it could not clone and execute the entire branch as one checkout. The changed executable components were reconstructed from the repository artifacts and manifests for local validation.
 
 A Docker daemon and `flyctl` runtime were not available locally. Therefore:
 
@@ -78,4 +78,4 @@ GitHub-hosted runners remain subject to the previously recorded account-level pr
 
 ## Deployment status
 
-This report validates the Phase 1 package for pull-request review. It does not certify a live Fly.io deployment, GitHub App installation, branch-protection activation, snapshot recovery drill, penetration test, or production authorization.
+This report validates the Phase 1 package for pull-request review. It does not certify a live Fly.io deployment, GitHub App installation, branch-protection activation, snapshot recovery drill, penetration test, or a successful production deployment.
